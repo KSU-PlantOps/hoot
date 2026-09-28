@@ -19,7 +19,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import __version__
+from . import __version__, logbuffer
 from .config import (
     Config,
     ConfigError,
@@ -41,10 +41,12 @@ def _setup_logging(verbose: bool, log_file: str | None = None) -> None:
         handlers.append(logging.FileHandler(log_file))
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
-        format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+        format=logbuffer.FORMAT,
+        datefmt=logbuffer.DATEFMT,
         handlers=handlers,
     )
+    # Keep recent output in memory too, so the web UI can show and download it.
+    logbuffer.install()
     # bacpypes3 is extremely chatty at DEBUG.
     logging.getLogger("bacpypes3").setLevel(logging.WARNING)
 

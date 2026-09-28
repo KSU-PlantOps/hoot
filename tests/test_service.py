@@ -234,3 +234,10 @@ async def test_temperature_disagreement_is_surfaced_as_a_warning(sim_config, pau
         assert any("disagree" in w for w in svc.status()["warnings"])
     finally:
         await svc.stop()
+
+
+async def test_readings_keep_the_drivers_channel_order(service):
+    """Regression: channels were walked through a set, so the web UI's cards
+    came out in a different order on every restart."""
+    await _run_cycles(service, 1)
+    assert list(service.latest) == ["temperature", "humidity", "co2"]

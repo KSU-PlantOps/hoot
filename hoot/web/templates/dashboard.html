@@ -79,6 +79,15 @@ canvas{width:100%;height:260px;display:block}
 .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
 footer{max-width:1180px;margin:0 auto;padding:0 20px 40px;color:var(--muted);font-size:12px}
 code{font-family:var(--mono);font-size:12px;background:var(--bg);padding:1px 5px;border-radius:4px}
+.logview{font:12px/1.45 var(--mono);background:var(--bg);border:1px solid var(--line);border-radius:8px;
+  padding:10px 12px;margin:0;min-height:120px;max-height:420px;overflow:auto;white-space:pre-wrap;
+  word-break:break-word}
+td.nowrap{white-space:nowrap} td.lv-warning{color:var(--warn)} td.lv-error{color:var(--bad)}
+.logview .WARNING{color:var(--warn)} .logview .ERROR,.logview .CRITICAL{color:var(--bad)}
+.logview .DEBUG{color:var(--muted)}
+textarea.yaml{font:12px/1.45 var(--mono);min-height:360px;resize:vertical}
+details summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--muted);margin:22px 0 10px}
+.chk{display:inline-flex;gap:6px;align-items:center;font-size:12px;color:var(--muted);margin:0}
 </style>
 </head>
 <body>
@@ -102,6 +111,7 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg);padding:1px 5px
       <div class="tab" data-tab="calib">Calibration</div>
       <div class="tab" data-tab="config">Settings</div>
       <div class="tab" data-tab="health">Health</div>
+      <div class="tab" data-tab="logs">Logs</div>
     </div>
 
     <!-- TREND -->
@@ -189,13 +199,57 @@ code{font-family:var(--mono);font-size:12px;background:var(--bg);padding:1px 5px
       <div class="toolbar" style="margin-top:20px;margin-bottom:0">
         <button class="primary" onclick="saveConfig()">Save settings</button>
         <button class="danger" onclick="restartService()">Restart service</button>
+        <a class="btn" href="api/config.yaml" download>Download config.yaml</a>
         <span id="cfgMsg" class="hint"></span>
       </div>
+
+      <details id="yamlBox">
+        <summary>Advanced: edit the full configuration (YAML)</summary>
+        <p class="hint" style="margin-top:0">Everything the form above does not cover —
+          sensors, points, web, display, logging. <b>Validate</b> checks it without saving.
+          Saving rewrites <code>config.yaml</code> without comments, and keeps a
+          <code>.bak</code> of the previous file.</p>
+        <textarea id="yamlText" class="yaml" spellcheck="false"></textarea>
+        <div class="toolbar" style="margin-top:10px;margin-bottom:0">
+          <button onclick="loadYaml()">Reload current</button>
+          <button onclick="sendYaml(true)">Validate</button>
+          <button class="primary" onclick="sendYaml(false)">Save YAML</button>
+          <span id="yamlMsg" class="hint"></span>
+        </div>
+      </details>
     </section>
 
     <!-- HEALTH -->
     <section data-panel="health" class="hide">
       <table><tbody id="healthBody"></tbody></table>
+    </section>
+
+    <!-- LOGS -->
+    <section data-panel="logs" class="hide">
+      <div class="toolbar">
+        <select id="logLevel" style="width:auto" onchange="loadLogs()">
+          <option value="DEBUG">Debug and up</option>
+          <option value="INFO" selected>Info and up</option>
+          <option value="WARNING">Warnings and errors</option>
+          <option value="ERROR">Errors only</option>
+        </select>
+        <button onclick="loadLogs()">Refresh</button>
+        <label class="chk"><input type="checkbox" id="logAuto" checked> auto-refresh</label>
+        <div class="grow"></div>
+        <a class="btn" href="api/logs/download" download>Download service log</a>
+        <a class="btn" href="api/events.csv" download>Download events (CSV)</a>
+        <a class="btn" href="api/support-bundle.zip" download
+           title="Config, status, service log and events in one zip">Support bundle</a>
+      </div>
+      <pre id="logView" class="logview">Loading…</pre>
+      <p class="hint">Service log since the last start (the most recent lines, kept in
+        memory). For older history use the events log below, or
+        <code>journalctl -u hoot</code> on the unit.</p>
+
+      <h2 style="margin-top:22px">Events</h2>
+      <table><thead><tr><th style="width:200px">Time</th><th style="width:80px">Level</th>
+        <th style="width:110px">Source</th><th>Message</th></tr></thead>
+        <tbody id="eventsBody"></tbody></table>
     </section>
   </div>
 </main>
@@ -227,6 +281,7 @@ $$(".tab").forEach(t => t.onclick = () => {
   $$("[data-panel]").forEach(p =>
     p.classList.toggle("hide", p.dataset.panel !== t.dataset.tab));
   if (t.dataset.tab === "trend") loadTrend();
+  if (t.dataset.tab === "logs") loadLogs();
 });
 
 // ---- live poll
@@ -449,10 +504,11 @@ function drawChart(pts){
     g.beginPath(); g.moveTo(pad.l,y); g.lineTo(W-pad.r,y); g.stroke();
     g.fillText(v.toFixed(1), pad.l-8, y);
   }
-  // x labels
-  g.textAlign = "center"; g.textBaseline = "top";
+  // x labels -- the end labels are aligned inward so they are not clipped
+  g.textBaseline = "top";
   for(let i=0;i<=3;i++){
     const t = t0 + (t1-t0)*i/3;
+    g.textAlign = i === 0 ? "left" : i === 3 ? "right" : "center";
     g.fillText(new Date(t*1000).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}),
                X(t), H-pad.b+7);
   }
@@ -479,6 +535,53 @@ function drawChart(pts){
   pts.forEach(p => { if(p.fault) g.fillRect(X(p.ts)-1, H-pad.b-4, 2, 4); });
 }
 
+// ---- full YAML config
+async function loadYaml(){
+  const r = await fetch("api/config.yaml");
+  $("#yamlText").value = r.ok ? await r.text() : "";
+  $("#yamlMsg").textContent = r.ok ? "Loaded the current configuration." : "Could not load config.";
+}
+$("#yamlBox").addEventListener("toggle", e => { if(e.target.open && !$("#yamlText").value) loadYaml(); });
+
+async function sendYaml(dry){
+  const r = await fetch("api/config.yaml" + (dry ? "?dry_run=true" : ""), {
+    method:"POST", headers:{"Content-Type":"application/yaml"}, body:$("#yamlText").value});
+  let d = {}; try{ d = await r.json(); }catch(e){}
+  if(!r.ok){
+    $("#yamlMsg").innerHTML = `<span style="color:var(--bad)">${esc(d.detail || ("HTTP " + r.status))}</span>`;
+    return;
+  }
+  let msg = dry ? "Valid." : "Saved.";
+  if(!dry && d.hot_applied.length) msg += " Applied live: " + d.hot_applied.join(", ") + ".";
+  if(d.restart_required) msg += dry ? " Saving it will need a restart." : " ⚠ Restart required.";
+  if(d.warnings.length) msg += ` ${d.warnings.length} warning(s) — see the banners.`;
+  $("#yamlMsg").textContent = msg;
+  if(!dry){ loadConfig(); poll(); }
+}
+
+// ---- logs
+async function loadLogs(){
+  const pre = $("#logView");
+  const stick = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 30;
+  try{
+    const r = await fetch(`api/logs?level=${$("#logLevel").value}&limit=1000`);
+    if(!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    pre.innerHTML = j.lines.map(e => `<span class="${e.level}">${esc(e.line)}</span>`).join("\n")
+      || "(no log output at this level yet)";
+    if(stick) pre.scrollTop = pre.scrollHeight;
+  }catch(e){ pre.textContent = "Could not load the service log."; }
+  try{
+    const r = await fetch("api/events?limit=100");
+    const j = await r.json();
+    $("#eventsBody").innerHTML = j.events.slice().reverse().map(e => `<tr>
+      <td class="nowrap">${esc(new Date(e.ts*1000).toLocaleString())}</td>
+      <td class="lv-${esc(e.level)}">${esc(e.level)}</td>
+      <td>${esc(e.source)}</td><td>${esc(e.message)}</td></tr>`).join("")
+      || `<tr><td colspan="4">${j.logging_enabled ? "No events yet." : "Local logging is disabled."}</td></tr>`;
+  }catch(e){}
+}
+
 // ---- helpers
 async function post(url, body){
   const r = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"},
@@ -498,6 +601,7 @@ window.addEventListener("resize", () => loadTrend());
 poll(); loadConfig();
 setInterval(poll, 2000);
 setInterval(() => { if(!$("[data-panel=trend]").classList.contains("hide")) loadTrend(); }, 60000);
+setInterval(() => { if(!$("[data-panel=logs]").classList.contains("hide") && $("#logAuto").checked) loadLogs(); }, 5000);
 </script>
 </body>
 </html>

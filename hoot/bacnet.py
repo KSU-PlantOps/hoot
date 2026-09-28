@@ -35,7 +35,7 @@ from bacpypes3.primitivedata import ObjectIdentifier
 
 from .config import Config, PointConfig
 from .netaddr import resolve as resolve_address
-from .units import BACNET_UNITS
+from .units import BACNET_UNITS, SYMBOLS, canonical_unit
 
 log = logging.getLogger(__name__)
 
@@ -289,7 +289,10 @@ class BACnetServer:
                 "in_alarm": s.in_alarm,
                 "updates": s.updates,
                 "healthy": s.healthy,
-                "calibration": s.config.calibration.describe(),
+                # Offsets are stored in canonical units; say which, since the
+                # value beside it may be in degF.
+                "calibration": s.config.calibration.describe(
+                    " " + SYMBOLS.get(canonical_unit(s.unit), canonical_unit(s.unit))),
             }
             for channel, s in self.points.items()
         }

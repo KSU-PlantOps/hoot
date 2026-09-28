@@ -4,6 +4,40 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Logs** tab in the web UI: the live service log (filterable by level, auto-refreshing),
+  the persistent event log, and downloads for the service log (`.log`), the event log
+  (CSV), and a support bundle zip (config, status, service log, events).
+- Download `config.yaml` from Settings, and an advanced editor for the full YAML config —
+  sensors, points, web, display — with *Validate* (dry run) before *Save*.
+- API: `/api/logs`, `/api/logs/download`, `/api/events`, `/api/events.csv`,
+  `GET`/`POST /api/config.yaml` (`?dry_run=true`), `/api/support-bundle.zip`.
+
+### Changed
+
+- README rewritten, with a banner, architecture diagram, concept render, and light/dark
+  screenshots of the web UI. The images, and the scripts that regenerate them, are in
+  `docs/images/`.
+
+### Fixed
+
+- Reading cards appeared in a different order after each restart (channels were iterated
+  through a set). They now follow the driver's channel order.
+- The trend chart clipped its last time label.
+- The BACnet points table showed calibration offsets without a unit. Offsets are stored in
+  °C, so they now say so rather than sitting unlabelled next to a °F value.
+- The service log box no longer reserves 420 px when it holds a few lines, and event
+  timestamps no longer wrap.
+
+### Security
+
+- `POST /api/restart` now requires a JSON request, so a plain HTML form on another site
+  can no longer restart the service from an operator's browser. The new YAML config upload
+  accepts only YAML content types for the same reason.
+
 ## [1.0.0] - 2026-09-28
 
 First public release.

@@ -13,6 +13,9 @@ when you deploy it:
   shared network, put it behind a TLS-terminating reverse proxy.
 - **BACnet/IP has no authentication.** HOOT publishes read-only analog-input objects and
   accepts no writes to its readings, but any host on the BACnet network can read them.
+- Anyone who can reach the web UI can also download the service log, event log,
+  configuration and support bundle. None contain passwords (those live only in
+  environment variables), but they do reveal addresses, device names and locations.
 - `/api/health` is deliberately unauthenticated so monitoring systems can poll it. It
   reveals the device name, uptime, and faulted channel names.
 

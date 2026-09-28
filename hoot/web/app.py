@@ -17,18 +17,23 @@ Config changes fall into two classes:
 from __future__ import annotations
 
 import asyncio
+import io
+import json
 import logging
 import secrets
 import time
+import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 
-from .. import __version__
+import yaml
+
+from .. import __version__, logbuffer
 from ..calibration import Calibration
 from ..config import Config, ConfigError, _shallow
 
@@ -38,6 +43,15 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 TEMPLATES = Path(__file__).parent / "templates"
+
+#: Content types accepted for a YAML config upload. None of these is a
+#: CORS-safelisted type, so a cross-site page cannot submit one without a
+#: preflight, and this app answers no preflights -- that is the CSRF defence
+#: for an endpoint that takes a raw body rather than JSON.
+YAML_TYPES = {"application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml"}
+
+LOG_LEVELS = {"DEBUG": logging.DEBUG, "INFO": logging.INFO,
+              "WARNING": logging.WARNING, "ERROR": logging.ERROR}
 
 #: Config keys that need a service restart to take effect (mirrors
 #: ``_restart_required``). ``web.host`` and ``web.port`` additionally need the
@@ -58,6 +72,7 @@ def create_app(service: "HootService") -> FastAPI:
         redoc_url=None,
     )
     templates = Jinja2Templates(directory=str(TEMPLATES))
+    logbuffer.install()
     # Strong references to fire-and-forget tasks; asyncio keeps only weak ones,
     # so an unreferenced restart task could be garbage-collected mid-flight.
     background: set[asyncio.Task] = set()
@@ -161,17 +176,21 @@ def create_app(service: "HootService") -> FastAPI:
             "restart_keys": sorted(RESTART_KEYS),
         }
 
-    @app.post("/api/config")
-    async def api_set_config(payload: dict[str, Any], _: None = Depends(require_auth)):
-        """Replace the config. Validates before writing; never persists a config
-        that would fail to load on next boot."""
+    def replace_config(payload: Any, dry_run: bool = False) -> dict[str, Any]:
+        """Validate, then (unless ``dry_run``) save and apply what can be applied
+        live. Never persists a config that would fail to load on next boot."""
+        if not isinstance(payload, dict):
+            raise HTTPException(400, "invalid configuration: expected a mapping of sections")
         try:
             new = Config.from_dict(payload, path=service.config.path)
             new.validate()
-        except (ConfigError, ValueError, KeyError) as exc:
+        except (ConfigError, ValueError, KeyError, TypeError, AttributeError) as exc:
             raise HTTPException(400, f"invalid configuration: {exc}") from exc
 
         needs_restart = _restart_required(service.config, new)
+        if dry_run:
+            return {"saved": False, "valid": True, "restart_required": needs_restart,
+                    "hot_applied": [], "warnings": new.warnings()}
         try:
             new.save()
         except OSError as exc:
@@ -180,10 +199,48 @@ def create_app(service: "HootService") -> FastAPI:
         applied = _apply_hot(service, new)
         return {
             "saved": True,
+            "valid": True,
             "restart_required": needs_restart,
             "hot_applied": applied,
             "warnings": new.warnings(),
         }
+
+    @app.post("/api/config")
+    async def api_set_config(payload: dict[str, Any], _: None = Depends(require_auth)):
+        """Replace the config from JSON (what the Settings form sends)."""
+        return replace_config(payload)
+
+    @app.get("/api/config.yaml")
+    async def api_get_config_yaml(_: None = Depends(require_auth)):
+        """The full config as YAML -- the same shape as config.yaml on disk.
+        Contains no secrets: passwords live in environment variables."""
+        return Response(
+            _config_yaml(service.config),
+            media_type="application/yaml",
+            headers={"Content-Disposition":
+                     f'attachment; filename="{_filename(service, "config", "yaml")}"'},
+        )
+
+    @app.post("/api/config.yaml")
+    async def api_set_config_yaml(
+        request: Request,
+        dry_run: bool = False,
+        _: None = Depends(require_auth),
+    ):
+        """Replace the whole config from YAML. ``?dry_run=true`` validates only.
+
+        This is the escape hatch for everything the Settings form does not
+        cover: sensors, points, web, display, logging.
+        """
+        content_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+        if content_type not in YAML_TYPES:
+            raise HTTPException(415, f"send the config as one of: {', '.join(sorted(YAML_TYPES))}")
+        body = await request.body()
+        try:
+            payload = yaml.safe_load(body.decode("utf-8"))
+        except (UnicodeDecodeError, yaml.YAMLError) as exc:
+            raise HTTPException(400, f"invalid YAML: {exc}") from exc
+        return replace_config(payload, dry_run=dry_run)
 
     @app.post("/api/calibrate")
     async def api_calibrate(payload: dict[str, Any], _: None = Depends(require_auth)):
@@ -238,12 +295,12 @@ def create_app(service: "HootService") -> FastAPI:
         if service.config.logging.enabled:
             service.store.log_event(
                 "info", "calibration",
-                f"{channel}: {point.calibration.describe(binding.canonical_unit)} ({note})",
+                f"{channel}: {point.calibration.describe(' ' + binding.canonical_unit)} ({note})",
             )
         return {
             "channel": channel,
             "calibration": point.calibration.to_dict(),
-            "describe": point.calibration.describe(binding.canonical_unit),
+            "describe": point.calibration.describe(" " + binding.canonical_unit),
         }
 
     @app.post("/api/calibrate/clear")
@@ -257,16 +314,82 @@ def create_app(service: "HootService") -> FastAPI:
         return {"channel": channel, "calibration": point.calibration.to_dict()}
 
     @app.post("/api/restart")
-    async def api_restart(_: None = Depends(require_auth)):
+    async def api_restart(request: Request, _: None = Depends(require_auth)):
         """Rebuild the service so structural config changes take effect.
 
         Briefly removes the device from the BACnet internetwork, so this is an
         explicit user action rather than something a config save does silently.
         """
+        # Require a JSON request (the UI sends one). A bodiless POST could be
+        # fired by a plain HTML form on any site the operator visits.
+        if not request.headers.get("content-type", "").startswith("application/json"):
+            raise HTTPException(415, "send Content-Type: application/json")
         task = asyncio.create_task(_restart(service))
         background.add(task)
         task.add_done_callback(background.discard)
         return {"restarting": True}
+
+    # ---- logs & diagnostics -----------------------------------------------
+
+    @app.get("/api/logs")
+    async def api_logs(
+        level: str = Query("INFO", pattern="^(DEBUG|INFO|WARNING|ERROR)$"),
+        limit: int = Query(500, gt=0, le=logbuffer.CAPACITY),
+        _: None = Depends(require_auth),
+    ):
+        """Recent service log lines, oldest first. In memory: since last start."""
+        entries = logbuffer.BUFFER.entries(LOG_LEVELS[level], limit)
+        return {"level": level, "capacity": logbuffer.CAPACITY, "lines": entries}
+
+    @app.get("/api/logs/download")
+    async def api_logs_download(
+        level: str = Query("DEBUG", pattern="^(DEBUG|INFO|WARNING|ERROR)$"),
+        _: None = Depends(require_auth),
+    ):
+        return Response(
+            _log_text(service, LOG_LEVELS[level]),
+            media_type="text/plain; charset=utf-8",
+            headers={"Content-Disposition":
+                     f'attachment; filename="{_filename(service, "service", "log")}"'},
+        )
+
+    @app.get("/api/events")
+    async def api_events(
+        limit: int = Query(100, gt=0, le=5000),
+        _: None = Depends(require_auth),
+    ):
+        """The persistent event log: startups, calibrations, sensor warnings."""
+        if not service.config.logging.enabled:
+            return {"events": [], "logging_enabled": False}
+        rows = await asyncio.to_thread(service.store.events, None, limit)
+        return {"events": rows, "logging_enabled": True}
+
+    @app.get("/api/events.csv")
+    async def api_events_csv(
+        hours: float = Query(24 * 90, gt=0, le=24 * 3650),
+        _: None = Depends(require_auth),
+    ):
+        if not service.config.logging.enabled:
+            raise HTTPException(400, "local logging is disabled on this unit")
+        since = time.time() - hours * 3600
+        return StreamingResponse(
+            service.store.export_events_csv(since),
+            media_type="text/csv",
+            headers={"Content-Disposition":
+                     f'attachment; filename="{_filename(service, "events", "csv")}"'},
+        )
+
+    @app.get("/api/support-bundle.zip")
+    async def api_support_bundle(_: None = Depends(require_auth)):
+        """Config, status, service log and event log in one file -- the thing
+        to attach to an email when asking someone else to look at a unit."""
+        data = await asyncio.to_thread(_support_bundle, service)
+        return Response(
+            data,
+            media_type="application/zip",
+            headers={"Content-Disposition":
+                     f'attachment; filename="{_filename(service, "support", "zip")}"'},
+        )
 
     @app.get("/api/health")
     async def api_health():
@@ -293,6 +416,36 @@ def create_app(service: "HootService") -> FastAPI:
 
 
 # ---- helpers --------------------------------------------------------------
+
+
+def _filename(service: "HootService", kind: str, ext: str) -> str:
+    name = "".join(c if c.isalnum() or c in "-_." else "_" for c in service.config.device.name)
+    return f"{name}_{kind}_{time.strftime('%Y%m%d-%H%M%S')}.{ext}"
+
+
+def _config_yaml(config: Config) -> str:
+    return yaml.safe_dump(config.to_dict(), sort_keys=False, allow_unicode=True)
+
+
+def _log_text(service: "HootService", min_level: int = logging.NOTSET) -> str:
+    header = (
+        f"# HOOT {__version__} service log -- {service.config.device.name}\n"
+        f"# captured {time.strftime('%Y-%m-%d %H:%M:%S %Z')}; the last "
+        f"{logbuffer.CAPACITY} lines at most, since the service last started.\n"
+        "# Older history: the events log, or `journalctl -u hoot` on the unit.\n"
+    )
+    return header + logbuffer.BUFFER.text(min_level)
+
+
+def _support_bundle(service: "HootService") -> bytes:
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("config.yaml", _config_yaml(service.config))
+        zf.writestr("status.json", json.dumps(service.status(), indent=2, default=str))
+        zf.writestr("service.log", _log_text(service))
+        if service.config.logging.enabled:
+            zf.writestr("events.csv", "".join(service.store.export_events_csv()))
+    return out.getvalue()
 
 
 def _save(config: Config) -> None:
