@@ -17,8 +17,8 @@ jobs:
         # 3.11 is what Raspberry Pi OS Bookworm ships -- keep it in the matrix.
         python-version: ["3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -30,3 +30,7 @@ jobs:
         run: pytest -q
       - name: Installer syntax
         run: bash -n deploy/install.sh
+      - name: Release metadata
+        # Version agrees across files and has a dated CHANGELOG section, so a
+        # version bump cannot be merged in a state the Release workflow rejects.
+        run: python .github/scripts/release_notes.py --check

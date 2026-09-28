@@ -1,0 +1,82 @@
+name: Release
+
+# Publishes a GitHub release whenever main carries a version that has not been
+# released yet -- so releasing is just merging a version bump. See the
+# "Releasing" section of CONTRIBUTING.md.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"   # what Raspberry Pi OS Bookworm ships
+          cache: pip
+
+      - name: Read version
+        id: version
+        run: |
+          version="$(python .github/scripts/release_notes.py --version)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if already released
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::notice::$TAG is already released; nothing to do."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install
+        if: steps.check.outputs.release == 'true'
+        run: pip install -r requirements.txt -e ".[dev]" build
+
+      - name: Lint and test
+        if: steps.check.outputs.release == 'true'
+        run: |
+          ruff check hoot tests
+          pytest -q
+
+      - name: Build
+        if: steps.check.outputs.release == 'true'
+        run: |
+          python -m build
+          (cd dist && sha256sum * > SHA256SUMS)
+          python .github/scripts/release_notes.py > release-notes.md
+
+      - name: Publish release
+        if: steps.check.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          flags=(--latest)
+          if [[ "$VERSION" =~ [a-z] ]]; then flags=(--prerelease --latest=false); fi
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "HOOT $VERSION" \
+            --notes "$(cat release-notes.md)" \
+            --generate-notes \
+            "${flags[@]}"

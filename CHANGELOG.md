@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-28
+
 ### Added
 
 - **Logs** tab in the web UI: the live service log (filterable by level, auto-refreshing),
@@ -15,12 +17,16 @@ All notable changes to this project are documented here. The format follows
   sensors, points, web, display — with *Validate* (dry run) before *Save*.
 - API: `/api/logs`, `/api/logs/download`, `/api/events`, `/api/events.csv`,
   `GET`/`POST /api/config.yaml` (`?dry_run=true`), `/api/support-bundle.zip`.
+- Releases are automated. Merging a version bump to `main` tests, builds, tags and
+  publishes the GitHub release, with notes from this changelog and the sdist, wheel and
+  `SHA256SUMS` attached. CI now checks every pull request can be released.
 
 ### Changed
 
 - README rewritten, with a banner, architecture diagram, concept render, and light/dark
   screenshots of the web UI. The images, and the scripts that regenerate them, are in
   `docs/images/`.
+- CI uses `actions/checkout@v7` and `actions/setup-python@v7` (Node 20 was deprecated).
 
 ### Fixed
 
