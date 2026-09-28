@@ -1,0 +1,18 @@
+# Raspberry Pi hardware dependencies. Install AFTER requirements.txt:
+#   pip install -r requirements-pi.txt
+#
+# These need a real Pi (Blinka probes /proc/device-tree to identify the board),
+# so they are kept out of requirements.txt to keep the simulator usable on a
+# laptop for development and BAS-side integration testing.
+-r requirements.txt
+
+adafruit-blinka>=8.20                      # CircuitPython compatibility layer
+adafruit-circuitpython-busdevice>=5.2      # raw register access (TMP117 / TMP119)
+adafruit-circuitpython-sht4x>=1.0.4        # SHT45 / SHT41 / SHT40
+adafruit-circuitpython-scd4x>=1.4.0        # SCD-41 CO2
+adafruit-circuitpython-ssd1306>=2.12.0     # 128x64 OLED
+Pillow>=10.0                               # OLED framebuffer rendering
+
+# Only if you actually fit a Sense HAT. Its temp/RH are NOT trustworthy as a
+# space measurement (see docs/HARDWARE.md) — this is here for the LED matrix.
+# sense-hat>=2.6.0

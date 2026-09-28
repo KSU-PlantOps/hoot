@@ -1,0 +1,12 @@
+# HOOT runtime dependencies — install with: pip install -r requirements.txt
+#
+# Core (all platforms, including a dev laptop running the simulator)
+bacpypes3>=0.0.100,<0.1     # BACnet/IP stack
+PyYAML>=6,<7                # config
+psutil>=5.9                 # interface netmask detection for BACnet binding
+fastapi>=0.110,<1           # web UI + JSON API
+uvicorn[standard]>=0.27,<1  # ASGI server
+jinja2>=3.1,<4              # dashboard template
+
+# Hardware — Raspberry Pi only. These pull in Blinka (adafruit-blinka), which
+# only builds on a Pi; install with:  pip install -r requirements-pi.txt

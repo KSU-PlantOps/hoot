@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hoot-probe"
+version = "1.0.0"
+description = "HOOT — a portable BACnet/IP temperature, humidity and CO2 probe for building automation"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "HOOT contributors" }]
+keywords = ["bacnet", "building-automation", "hvac", "raspberry-pi", "sensor", "iaq"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Manufacturing",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Topic :: System :: Monitoring",
+]
+dependencies = [
+    "bacpypes3>=0.0.100,<0.1",
+    "PyYAML>=6,<7",
+    "psutil>=5.9",
+    "fastapi>=0.110,<1",
+    "uvicorn[standard]>=0.27,<1",
+    "jinja2>=3.1,<4",
+]
+
+[project.optional-dependencies]
+pi = [
+    "adafruit-blinka>=8.20",
+    "adafruit-circuitpython-busdevice>=5.2",
+    "adafruit-circuitpython-sht4x>=1.0.4",
+    "adafruit-circuitpython-scd4x>=1.4.0",
+    "adafruit-circuitpython-ssd1306>=2.12.0",
+    "Pillow>=10.0",
+]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "httpx>=0.27", "ruff>=0.6"]
+
+[project.urls]
+Homepage = "https://github.com/KSU-PlantOps/hoot"
+Issues = "https://github.com/KSU-PlantOps/hoot/issues"
+
+[project.scripts]
+hoot = "hoot.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["hoot*"]
+
+[tool.setuptools.package-data]
+"hoot.web" = ["templates/*.html", "static/*"]
+
+[tool.ruff]
+target-version = "py311"   # Raspberry Pi OS Bookworm ships Python 3.11
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E9", "F", "B", "UP", "RUF"]
+ignore = ["E501", "UP037", "RUF001", "RUF002", "RUF003", "RUF005", "RUF012", "RUF022",
+          "RUF059", "RUF100", "B008"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

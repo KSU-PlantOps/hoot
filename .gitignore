@@ -1,0 +1,32 @@
+# Site-specific configuration and data — never commit these
+config.yaml
+config.yaml.bak
+*.yaml.bak
+data/
+*.db
+*.db-wal
+*.db-shm
+logs/
+*.log
+
+# Internal-only material: institutional branding and management briefs
+US_Building Automation Systems/
+reports/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.swp

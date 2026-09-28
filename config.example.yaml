@@ -1,0 +1,176 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# HOOT — Humidity & Operational Observation Terminal
+# config.example.yaml — copy to config.yaml and edit for THIS unit.
+#
+#   cp config.example.yaml config.yaml
+#
+# config.yaml is gitignored. Most of this is editable from the web UI at
+# http://<pod-ip>:8080 — this file is the source of truth it reads and writes.
+#
+# SECRETS ARE NOT STORED HERE. If you enable web auth, set:
+#   HOOT_WEB_PASSWORD
+# ─────────────────────────────────────────────────────────────────────────────
+
+device:
+  name: "HOOT-01"                 # also the BACnet device object name
+  location: "Bldg 12 / Rm 214"    # shown in BACnet 'location' property
+  description: "HOOT portable environmental probe"
+  asset_tag: ""                   # your fixed-asset tag number
+
+bacnet:
+  enabled: true
+
+  # MUST be unique across the whole BACnet internetwork. Two devices sharing an
+  # instance number is a genuinely miserable problem to diagnose — coordinate
+  # this with whoever owns your BACnet numbering standard.
+  device_instance: 599001
+
+  # "auto" detects the interface address AND its real netmask. If you set it
+  # manually you MUST include the prefix length (e.g. "10.20.30.40/23"):
+  # BACnet needs it to compute the broadcast address for Who-Is/I-Am.
+  address: "auto"
+  port: 47808                     # 0xBAC0, the standard port
+
+  # 999 is the BACpypes *test* vendor ID. Fine on a bench. Before these go on a
+  # production internetwork, use your site's ASHRAE-assigned ID.
+  vendor_identifier: 999
+  vendor_name: "HOOT"
+  model_name: "HOOT Environmental Probe"
+
+  # Only needed if the pod is on a DIFFERENT subnet from the BAS. Without it,
+  # the pod answers unicast reads but never appears in a discovery scan,
+  # because Who-Is broadcasts don't cross routers.
+  bbmd_address: ""                # e.g. "10.20.0.5:47808"
+  bbmd_ttl_seconds: 900
+
+  max_apdu_length: 1024
+  segmentation: "segmentedBoth"
+
+units:
+  temperature: "degF"             # degF or degC — affects published + displayed values
+
+# ─── Sensors ─────────────────────────────────────────────────────────────────
+# Drivers: sht4x | tmp11x | scd4x | sensehat | simulator
+sensors:
+  # NOTE ON BUS SPEED: there is deliberately no i2c_frequency option here.
+  # Blinka ignores frequency= on Linux ("I2C frequency is not settable in
+  # python, ignoring!"); the kernel takes the speed from the device tree. The
+  # 50 kHz needed for the 1 m probe lead is set ONCE, in
+  # /boot/firmware/config.txt, by deploy/install.sh:
+  #     dtparam=i2c_arm=on,i2c_arm_baudrate=50000
+  # Setting i2c_frequency here would do nothing; HOOT logs a warning if you do.
+
+  - driver: sht4x                 # SHT45 — the reference temp/RH measurement
+    options:
+      mode: "NOHEAT_HIGHPRECISION"
+
+  - driver: tmp11x                # TI TMP119 — reference temperature cross-check
+    options:
+      address: 0x48
+      # A second temperature sensor on a different physical principle. A lone
+      # sensor cannot detect its own drift; when these two disagree by more
+      # than 0.5 degC, HOOT logs a warning, records an event, and shows a
+      # banner in the web UI. (It does not fault the BACnet point: with two
+      # sensors disagreeing, HOOT cannot tell which one is wrong.)
+      # Remove this block to save $15 and lose the self-check.
+
+  - driver: scd4x                 # SCD-41 — true NDIR CO2
+    options:
+      altitude_m: 300             # your site's elevation in metres. NDIR is pressure-dependent.
+      automatic_self_calibration: false
+      # ASC assumes the sensor sees ~400 ppm outdoor air regularly. True for a
+      # probe carried between sites, false for one left in an occupied room for
+      # weeks — where it would slowly "learn" that stale air is fresh.
+
+# ─── Published points ────────────────────────────────────────────────────────
+# Each entry becomes one BACnet analog-input object.
+# 'channel' must be produced by one of the sensors above.
+points:
+  - channel: temperature
+    name: "SpaceTemp"
+    instance: 1
+    enabled: true
+    description: "Space dry-bulb temperature"
+    cov_increment: 0.1            # in published units (degF here)
+    calibration: {offset: 0.0, gain: 1.0, note: ""}
+    high_limit: null              # e.g. 85.0 to raise a BACnet alarm above 85 degF
+    low_limit: null
+
+  - channel: humidity
+    name: "SpaceHumidity"
+    instance: 2
+    enabled: true
+    description: "Space relative humidity"
+    cov_increment: 0.5
+    calibration: {offset: 0.0, gain: 1.0, note: ""}
+    high_limit: null
+    low_limit: null
+
+  - channel: co2
+    name: "SpaceCO2"
+    instance: 3
+    enabled: true
+    description: "Space CO2 concentration"
+    cov_increment: 10.0
+    calibration: {offset: 0.0, gain: 1.0, note: ""}
+    high_limit: null              # 1100 ppm is a common IAQ threshold
+    low_limit: null
+
+  - channel: reference_temperature
+    name: "RefTemp"
+    instance: 5
+    enabled: true
+    description: "Reference temperature (TMP119) - cross-check for SpaceTemp"
+    cov_increment: 0.1
+    calibration: {offset: 0.0, gain: 1.0, note: ""}
+    high_limit: null
+    low_limit: null
+
+  # Diagnostic: the SCD41's own temperature. It self-heats, so this is NOT a
+  # space measurement — it's a health signal. A widening gap between this and
+  # SpaceTemp means the head is dirty, blocked, or the fan has stopped.
+  - channel: scd_temperature
+    name: "ProbeHeadTemp"
+    instance: 4
+    enabled: true
+    description: "DIAGNOSTIC ONLY - SCD41 internal temp, self-heated"
+    cov_increment: 0.5
+    calibration: {offset: 0.0, gain: 1.0, note: ""}
+    high_limit: null
+    low_limit: null
+
+# ─── Timing ──────────────────────────────────────────────────────────────────
+sampling:
+  # How often sensors are read and BACnet present-values updated.
+  # The SCD41 only produces a new reading every 5 s, so faster is pointless.
+  interval_seconds: 5.0
+
+logging:
+  enabled: true
+  # Local trend interval — deliberately slower than sampling. The BAS wants
+  # live values; a 90-day local trend at 5 s would be ~1.5M rows per channel.
+  interval_seconds: 60.0
+  retention_days: 90
+  database: "data/hoot.db"
+  # Record min/max/mean between trend samples, so a 60 s trend can't miss a
+  # 10 s excursion.
+  aggregate: true
+
+# ─── Web UI ──────────────────────────────────────────────────────────────────
+web:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8080
+  auth_enabled: false             # set true on any shared network
+  username: "hoot"
+  password_env: "HOOT_WEB_PASSWORD"
+
+# ─── On-unit OLED ────────────────────────────────────────────────────────────
+display:
+  enabled: true
+  driver: "ssd1306"
+  width: 128
+  height: 64
+  address: 0x3C
+  rotate_seconds: 5.0
+  dim_after_seconds: 0.0          # reserved for burn-in protection; not implemented yet

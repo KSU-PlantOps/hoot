@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ status.device.name }} — HOOT</title>
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#fff; --ink:#14171a; --muted:#5b6570; --line:#dfe3e8;
+  --accent:#1f6feb; --ok:#1a7f37; --warn:#9a6700; --bad:#b42318;
+  --okbg:#e8f5ec; --warnbg:#fff6e0; --badbg:#fdeceb;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0f1216; --panel:#171b21; --ink:#e6e9ee; --muted:#9aa4b2; --line:#262c35;
+    --accent:#4c8dff; --ok:#3fb950; --warn:#d29922; --bad:#f85149;
+    --okbg:#132b1b; --warnbg:#2b2313; --badbg:#2d1618;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}
+header{background:var(--panel);border-bottom:1px solid var(--line);padding:14px 20px;
+  display:flex;flex-wrap:wrap;gap:14px;align-items:center;position:sticky;top:0;z-index:10}
+h1{font-size:19px;margin:0;letter-spacing:-.2px}
+h1 .sub{font-weight:400;color:var(--muted);font-size:13px;margin-left:8px}
+.grow{flex:1}
+.pill{padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;
+  border:1px solid transparent;white-space:nowrap}
+.pill.ok{background:var(--okbg);color:var(--ok)} .pill.bad{background:var(--badbg);color:var(--bad)}
+.pill.warn{background:var(--warnbg);color:var(--warn)}
+main{max-width:1180px;margin:0 auto;padding:20px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:18px;margin-bottom:18px}
+.panel h2{font-size:13px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);
+  margin:0 0 14px}
+.cards{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.card .value{font:600 40px/1.1 var(--mono);margin:8px 0 2px;letter-spacing:-1px}
+.card .unit{font-size:16px;color:var(--muted);font-weight:400}
+.card .meta{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.card.fault{border-color:var(--bad)}
+.card.fault .value{color:var(--bad);font-size:22px}
+.card.unpub{border-style:dashed;opacity:.85}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line);font-weight:600}
+td{padding:9px 10px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:12.5px}
+tr:last-child td{border-bottom:none}
+.banner{border-radius:8px;padding:11px 14px;margin-bottom:12px;font-size:13px;
+  border:1px solid;display:flex;gap:9px;align-items:flex-start}
+.banner.warn{background:var(--warnbg);border-color:var(--warn);color:var(--warn)}
+.banner.bad{background:var(--badbg);border-color:var(--bad);color:var(--bad)}
+.banner b{font-weight:600}
+button,.btn{font:inherit;font-weight:500;padding:7px 14px;border-radius:7px;
+  border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--accent);color:var(--accent)}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.primary:hover{filter:brightness(1.1);color:#fff}
+button.danger{color:var(--bad);border-color:var(--bad)}
+button:disabled{opacity:.5;cursor:not-allowed}
+input,select,textarea{font:inherit;padding:6px 9px;border-radius:6px;border:1px solid var(--line);
+  background:var(--bg);color:var(--ink);width:100%}
+input[type=checkbox]{width:auto}
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500}
+.row{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:12px}
+.toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+canvas{width:100%;height:260px;display:block}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px;flex-wrap:wrap}
+.tab{padding:8px 14px;cursor:pointer;border-bottom:2px solid transparent;color:var(--muted);
+  font-weight:500;font-size:13px}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.hide{display:none}
+.hint{font-size:12px;color:var(--muted);margin-top:5px;line-height:1.45}
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+footer{max-width:1180px;margin:0 auto;padding:0 20px 40px;color:var(--muted);font-size:12px}
+code{font-family:var(--mono);font-size:12px;background:var(--bg);padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🦉 <span id="devname">{{ status.device.name }}</span>
+      <span class="sub" id="devloc">{{ status.device.location or "no location set" }}</span></h1>
+  <div class="grow"></div>
+  <span class="pill" id="conn">connecting…</span>
+  <span class="pill ok" id="bacpill">BACnet</span>
+</header>
+
+<main>
+  <div id="warnings"></div>
+
+  <div class="cards" id="cards"></div>
+
+  <div class="panel">
+    <div class="tabs">
+      <div class="tab active" data-tab="trend">Trend</div>
+      <div class="tab" data-tab="points">BACnet points</div>
+      <div class="tab" data-tab="calib">Calibration</div>
+      <div class="tab" data-tab="config">Settings</div>
+      <div class="tab" data-tab="health">Health</div>
+    </div>
+
+    <!-- TREND -->
+    <section data-panel="trend">
+      <div class="toolbar">
+        <select id="trendChannel" style="width:auto"></select>
+        <select id="trendHours" style="width:auto">
+          <option value="1">1 hour</option>
+          <option value="6" selected>6 hours</option>
+          <option value="24">24 hours</option>
+          <option value="168">7 days</option>
+          <option value="720">30 days</option>
+        </select>
+        <button onclick="loadTrend()">Refresh</button>
+        <div class="grow"></div>
+        <a class="btn" id="csvLink" href="#" download>Export CSV</a>
+      </div>
+      <canvas id="chart"></canvas>
+      <div class="legend">
+        <span><i style="background:var(--accent)"></i>mean</span>
+        <span><i style="background:var(--accent);opacity:.25"></i>min–max band</span>
+        <span id="trendMeta"></span>
+      </div>
+    </section>
+
+    <!-- POINTS -->
+    <section data-panel="points" class="hide">
+      <table><thead><tr>
+        <th>Object</th><th>Name</th><th>Channel</th><th>Present value</th>
+        <th>Reliability</th><th>Calibration</th><th>Updates</th>
+      </tr></thead><tbody id="pointsBody"></tbody></table>
+      <p class="hint">These are the objects your BAS will discover. Object type is
+        <code>analog-input</code> — read-only by design; nothing should command a thermometer.</p>
+    </section>
+
+    <!-- CALIBRATION -->
+    <section data-panel="calib" class="hide">
+      <p class="hint" style="margin-top:0">
+        Put HOOT's probe head next to a reference instrument, let both settle for
+        10–15 minutes, then enter what the reference reads. The offset is stored in
+        canonical units, so it stays valid if you later switch °F/°C.
+      </p>
+      <div id="calibList"></div>
+    </section>
+
+    <!-- CONFIG -->
+    <section data-panel="config" class="hide">
+      <div id="cfgWarn"></div>
+      <h2>Timing</h2>
+      <div class="row">
+        <div><label>Sample interval (s)</label><input id="cfg_sample" type="number" step="0.5" min="1"></div>
+        <div><label>Trend interval (s)</label><input id="cfg_trend" type="number" step="1" min="1"></div>
+        <div><label>Retention (days)</label><input id="cfg_retention" type="number" step="1" min="0"></div>
+      </div>
+      <p class="hint">Sample interval also sets how fast BACnet present-values update.
+        The SCD41 only produces a new CO₂ reading every 5&nbsp;s, so going below that
+        costs CPU without gaining resolution.</p>
+
+      <h2 style="margin-top:22px">Identity</h2>
+      <div class="row">
+        <div><label>Device name</label><input id="cfg_name"></div>
+        <div><label>Location</label><input id="cfg_location"></div>
+        <div><label>Asset tag</label><input id="cfg_asset"></div>
+      </div>
+
+      <h2 style="margin-top:22px">BACnet <span style="color:var(--warn)">(restart required)</span></h2>
+      <div class="row">
+        <div><label>Device instance</label><input id="cfg_instance" type="number" min="0" max="4194302"></div>
+        <div><label>Address</label><input id="cfg_address" placeholder="auto or 10.1.2.3/24"></div>
+        <div><label>Port</label><input id="cfg_port" type="number" min="1" max="65535"></div>
+      </div>
+      <div class="row">
+        <div><label>Vendor ID</label><input id="cfg_vendor" type="number" min="0"></div>
+        <div><label>BBMD address (other subnet only)</label><input id="cfg_bbmd" placeholder="10.20.0.5:47808"></div>
+        <div><label>Temperature units</label>
+          <select id="cfg_units"><option value="degF">°F</option><option value="degC">°C</option></select></div>
+      </div>
+      <p class="hint">Device instance must be unique across your whole BACnet
+        internetwork. Address <code>auto</code> detects the interface and its real
+        netmask — if you set it manually, include the prefix length.</p>
+
+      <h2 style="margin-top:22px">Alarm limits</h2>
+      <div id="limitList"></div>
+
+      <div class="toolbar" style="margin-top:20px;margin-bottom:0">
+        <button class="primary" onclick="saveConfig()">Save settings</button>
+        <button class="danger" onclick="restartService()">Restart service</button>
+        <span id="cfgMsg" class="hint"></span>
+      </div>
+    </section>
+
+    <!-- HEALTH -->
+    <section data-panel="health" class="hide">
+      <table><tbody id="healthBody"></tbody></table>
+    </section>
+  </div>
+</main>
+
+<footer>
+  HOOT — Humidity &amp; Operational Observation Terminal ·
+  v<span id="ver">{{ status.device.version }}</span> ·
+  BACnet device <span id="footInst">{{ status.bacnet.device_instance }}</span>
+  at <span id="footAddr">{{ status.bacnet.address or "—" }}</span>
+</footer>
+
+<script>
+const $  = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+let STATE = null, CFG = null;
+
+const SYM = {degF:"°F", degC:"°C", percentRH:"%", ppm:"ppm", hPa:"hPa"};
+const LABEL = {
+  temperature:"Temperature", humidity:"Humidity", co2:"CO₂",
+  scd_temperature:"Probe head temp", scd_humidity:"Probe head RH",
+  cpu_temperature:"CPU temp", pressure:"Pressure"
+};
+const fmtLabel = c => LABEL[c] || c.replace(/_/g," ");
+
+// ---- tabs
+$$(".tab").forEach(t => t.onclick = () => {
+  $$(".tab").forEach(x => x.classList.remove("active"));
+  t.classList.add("active");
+  $$("[data-panel]").forEach(p =>
+    p.classList.toggle("hide", p.dataset.panel !== t.dataset.tab));
+  if (t.dataset.tab === "trend") loadTrend();
+});
+
+// ---- live poll
+async function poll(){
+  try{
+    const r = await fetch("api/status");
+    if(!r.ok) throw new Error(r.status);
+    STATE = await r.json();
+    $("#conn").className = "pill ok"; $("#conn").textContent = "live";
+    render();
+  }catch(e){
+    $("#conn").className = "pill bad";
+    $("#conn").textContent = "disconnected";
+  }
+}
+
+function render(){
+  const s = STATE;
+  $("#devname").textContent = s.device.name;
+  $("#devloc").textContent  = s.device.location || "no location set";
+  $("#footInst").textContent = s.bacnet.device_instance;
+  $("#footAddr").textContent = s.bacnet.address || "—";
+  $("#bacpill").textContent  = s.bacnet.enabled ? "BACnet " + s.bacnet.device_instance : "BACnet off";
+  $("#bacpill").className    = "pill " + (s.bacnet.enabled ? "ok" : "warn");
+
+  // warnings
+  $("#warnings").innerHTML = (s.warnings || []).map(w =>
+    `<div class="banner warn"><b>⚠</b><span>${esc(w)}</span></div>`).join("");
+
+  // cards
+  $("#cards").innerHTML = Object.entries(s.readings).map(([ch,r]) => {
+    const b = s.bindings[ch] || {};
+    if(r.fault) return `<div class="card fault">
+        <div class="label">${esc(fmtLabel(ch))}</div>
+        <div class="value">FAULT</div>
+        <div class="meta">${esc(r.fault.slice(0,64))}</div></div>`;
+    const hasPoint = !!(s.bacnet.points || {})[ch];
+    const unpub = b.publishable === false || !hasPoint;
+    const why = b.publishable === false ? esc((b.reason||"").slice(0,44))
+              : s.bacnet.enabled ? "no BACnet point configured" : "BACnet disabled";
+    return `<div class="card ${unpub?"unpub":""}">
+        <div class="label">${esc(fmtLabel(ch))}</div>
+        <div class="value">${r.value.toFixed(ch==="co2"?0:2)}<span class="unit"> ${SYM[r.unit]||r.unit}</span></div>
+        <div class="meta">${unpub ? "not published — "+why : "published to BACnet"}</div></div>`;
+  }).join("") || `<div class="card"><div class="label">No readings yet</div></div>`;
+
+  // points table
+  $("#pointsBody").innerHTML = Object.entries(s.bacnet.points || {}).map(([ch,p]) => {
+    const good = p.healthy;
+    return `<tr>
+      <td>AI:${p.instance}</td><td>${esc(p.name)}</td><td>${esc(ch)}</td>
+      <td>${p.value===null?"—":p.value.toFixed(2)}</td>
+      <td><span class="status-dot" style="background:${good?"var(--ok)":"var(--bad)"}"></span>${
+          good ? "no-fault-detected" : esc((p.fault||"fault").slice(0,40))}</td>
+      <td>${esc(p.calibration)}</td><td>${p.updates}</td></tr>`;
+  }).join("") || `<tr><td colspan="7">No points configured.</td></tr>`;
+
+  // health
+  const h = s.health;
+  $("#healthBody").innerHTML = [
+    ["Uptime", dur(h.uptime_seconds)],
+    ["Sample cycles", h.cycles],
+    ["Read errors", h.read_errors + (h.cycles ? ` (${(100*h.read_errors/Math.max(1,h.cycles)).toFixed(1)}% of cycles)` : "")],
+    ["Trend rows written", h.trend_rows],
+    ["Last sample", h.last_sample_at ? ago(h.last_sample_at) : "never"],
+    ["Last trend write", h.last_trend_at ? ago(h.last_trend_at) : "never"],
+    ["Temperature cross-check", h.temperature_agreement === null ? "n/a (single sensor)"
+        : `${h.temperature_agreement.toFixed(3)} °C apart${h.agreement_alarm ? " — DISAGREE" : ""}`],
+    ["BACnet address", s.bacnet.address || "—"],
+    ["Last error", h.last_error || "none"],
+  ].map(([k,v]) => `<tr><th style="width:210px">${k}</th><td>${esc(String(v))}</td></tr>`).join("");
+
+  buildCalib();
+  if(!$("#trendChannel").options.length) buildChannelPicker();
+}
+
+function buildChannelPicker(){
+  const chans = Object.keys(STATE.readings);
+  $("#trendChannel").innerHTML = chans.map(c =>
+    `<option value="${c}">${esc(fmtLabel(c))}</option>`).join("");
+  if(chans.length) loadTrend();
+}
+
+// ---- calibration UI
+function buildCalib(){
+  if(document.activeElement && document.activeElement.closest("#calibList")) return;
+  $("#calibList").innerHTML = Object.entries(STATE.readings).map(([ch,r]) => {
+    const p = (STATE.bacnet.points||{})[ch];
+    const cur = r.value===null ? "—" : r.value.toFixed(2)+" "+(SYM[r.unit]||r.unit);
+    return `<div class="row" style="align-items:end;border-bottom:1px solid var(--line);padding-bottom:12px">
+      <div><label>${esc(fmtLabel(ch))}</label>
+           <div style="font-family:var(--mono);padding:6px 0">now: ${cur}</div></div>
+      <div><label>Reference reads</label>
+           <input id="cal_${ch}" type="number" step="0.01" placeholder="e.g. 71.80"></div>
+      <div><label>Note</label><input id="caln_${ch}" placeholder="vs Fluke 971, bench"></div>
+      <div><label>&nbsp;</label>
+           <button onclick="applyCal('${ch}')">Apply</button>
+           <button onclick="clearCal('${ch}')" title="Remove calibration">Clear</button></div>
+      <div><label>Current</label><div class="hint">${esc(p ? p.calibration : "—")}</div></div>
+    </div>`;
+  }).join("");
+}
+
+async function applyCal(ch){
+  const v = $("#cal_"+ch).value;
+  if(v==="") return toast("Enter what the reference instrument reads.");
+  const r = await post("api/calibrate", {channel:ch, reference:parseFloat(v), note:$("#caln_"+ch).value});
+  toast(r.ok ? "Calibrated: "+r.data.describe : "Failed: "+r.data.detail);
+  if(r.ok){ $("#cal_"+ch).value=""; poll(); }
+}
+async function clearCal(ch){
+  const r = await post("api/calibrate/clear", {channel:ch});
+  toast(r.ok ? "Calibration cleared." : "Failed."); poll();
+}
+
+// ---- config
+async function loadConfig(){
+  const r = await fetch("api/config"); const j = await r.json(); CFG = j.config;
+  $("#cfg_sample").value    = CFG.sampling.interval_seconds;
+  $("#cfg_trend").value     = CFG.logging.interval_seconds;
+  $("#cfg_retention").value = CFG.logging.retention_days;
+  $("#cfg_name").value      = CFG.device.name;
+  $("#cfg_location").value  = CFG.device.location;
+  $("#cfg_asset").value     = CFG.device.asset_tag;
+  $("#cfg_instance").value  = CFG.bacnet.device_instance;
+  $("#cfg_address").value   = CFG.bacnet.address;
+  $("#cfg_port").value      = CFG.bacnet.port;
+  $("#cfg_vendor").value    = CFG.bacnet.vendor_identifier;
+  $("#cfg_bbmd").value      = CFG.bacnet.bbmd_address;
+  $("#cfg_units").value     = CFG.units.temperature;
+  $("#limitList").innerHTML = CFG.points.map((p,i) => `
+    <div class="row" style="align-items:end">
+      <div><label>${esc(p.name)}</label><div class="hint">${esc(p.channel)}</div></div>
+      <div><label>Low limit</label><input id="lim_lo_${i}" type="number" step="any"
+           value="${p.low_limit===null?"":p.low_limit}" placeholder="none"></div>
+      <div><label>High limit</label><input id="lim_hi_${i}" type="number" step="any"
+           value="${p.high_limit===null?"":p.high_limit}" placeholder="none"></div>
+      <div><label>COV increment</label><input id="lim_cov_${i}" type="number" step="any"
+           value="${p.cov_increment}"></div>
+    </div>`).join("");
+}
+
+async function saveConfig(){
+  const c = JSON.parse(JSON.stringify(CFG));
+  c.sampling.interval_seconds = +$("#cfg_sample").value;
+  c.logging.interval_seconds  = +$("#cfg_trend").value;
+  c.logging.retention_days    = +$("#cfg_retention").value;
+  c.device.name      = $("#cfg_name").value;
+  c.device.location  = $("#cfg_location").value;
+  c.device.asset_tag = $("#cfg_asset").value;
+  c.bacnet.device_instance    = +$("#cfg_instance").value;
+  c.bacnet.address            = $("#cfg_address").value;
+  c.bacnet.port               = +$("#cfg_port").value;
+  c.bacnet.vendor_identifier  = +$("#cfg_vendor").value;
+  c.bacnet.bbmd_address       = $("#cfg_bbmd").value;
+  c.units.temperature         = $("#cfg_units").value;
+  c.points.forEach((p,i) => {
+    const lo = $("#lim_lo_"+i).value, hi = $("#lim_hi_"+i).value;
+    p.low_limit  = lo===""?null:+lo;
+    p.high_limit = hi===""?null:+hi;
+    p.cov_increment = +$("#lim_cov_"+i).value;
+  });
+  const r = await post("api/config", c);
+  if(!r.ok){ $("#cfgMsg").innerHTML = `<span style="color:var(--bad)">${esc(r.data.detail)}</span>`; return; }
+  CFG = c;
+  let msg = "Saved.";
+  if(r.data.hot_applied.length) msg += " Applied live: " + r.data.hot_applied.join(", ") + ".";
+  if(r.data.restart_required)   msg += " ⚠ Restart required for BACnet changes.";
+  $("#cfgMsg").textContent = msg;
+  loadConfig();
+}
+
+async function restartService(){
+  if(!confirm("Restart the HOOT service?\n\nThe unit will briefly disappear from the BACnet internetwork while the stack rebuilds.")) return;
+  await post("api/restart", {});
+  $("#cfgMsg").textContent = "Restarting…";
+  setTimeout(() => { poll(); loadConfig(); $("#cfgMsg").textContent = "Restarted."; }, 3500);
+}
+
+// ---- trend chart (hand-rolled: no CDN, works on an air-gapped VLAN)
+async function loadTrend(){
+  const ch = $("#trendChannel").value, hrs = $("#trendHours").value;
+  if(!ch) return;
+  $("#csvLink").href = `api/export.csv?hours=${hrs}&channels=${encodeURIComponent(ch)}`;
+  try{
+    const r = await fetch(`api/history?channel=${encodeURIComponent(ch)}&hours=${hrs}`);
+    const j = await r.json();
+    drawChart(j.points || []);
+    $("#trendMeta").textContent = `${(j.points||[]).length} samples`;
+  }catch(e){ drawChart([]); $("#trendMeta").textContent = "no data"; }
+}
+
+function drawChart(pts){
+  const cv = $("#chart"), dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, H = 260;
+  cv.width = W*dpr; cv.height = H*dpr;
+  const g = cv.getContext("2d"); g.scale(dpr,dpr); g.clearRect(0,0,W,H);
+  const css = getComputedStyle(document.body);
+  const line = css.getPropertyValue("--line"), muted = css.getPropertyValue("--muted");
+  const accent = css.getPropertyValue("--accent");
+
+  if(!pts.length){
+    g.fillStyle = muted; g.font = "13px system-ui"; g.textAlign = "center";
+    g.fillText("No trend data for this window.", W/2, H/2); return;
+  }
+  const pad = {l:52, r:12, t:12, b:26};
+  const vals = pts.flatMap(p => [p.min ?? p.value, p.max ?? p.value, p.value]).filter(v => v!==null);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if(hi-lo < 1e-6){ hi += 0.5; lo -= 0.5; }
+  const padY = (hi-lo)*0.1; lo -= padY; hi += padY;
+  const t0 = pts[0].ts, t1 = pts[pts.length-1].ts || t0+1;
+  const X = t => pad.l + (t-t0)/Math.max(1e-9,(t1-t0)) * (W-pad.l-pad.r);
+  const Y = v => pad.t + (1-(v-lo)/(hi-lo)) * (H-pad.t-pad.b);
+
+  // grid + y labels
+  g.strokeStyle = line; g.fillStyle = muted; g.font = "11px system-ui"; g.lineWidth = 1;
+  g.textAlign = "right"; g.textBaseline = "middle";
+  for(let i=0;i<=4;i++){
+    const v = lo + (hi-lo)*i/4, y = Math.round(Y(v))+0.5;
+    g.beginPath(); g.moveTo(pad.l,y); g.lineTo(W-pad.r,y); g.stroke();
+    g.fillText(v.toFixed(1), pad.l-8, y);
+  }
+  // x labels
+  g.textAlign = "center"; g.textBaseline = "top";
+  for(let i=0;i<=3;i++){
+    const t = t0 + (t1-t0)*i/3;
+    g.fillText(new Date(t*1000).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}),
+               X(t), H-pad.b+7);
+  }
+  // min-max band
+  const withRange = pts.filter(p => p.min!==null && p.max!==null);
+  if(withRange.length > 1){
+    g.beginPath();
+    withRange.forEach((p,i) => i ? g.lineTo(X(p.ts),Y(p.max)) : g.moveTo(X(p.ts),Y(p.max)));
+    for(let i=withRange.length-1;i>=0;i--) g.lineTo(X(withRange[i].ts), Y(withRange[i].min));
+    g.closePath(); g.fillStyle = accent; g.globalAlpha = .18; g.fill(); g.globalAlpha = 1;
+  }
+  // mean line — break the path across faulted gaps rather than drawing
+  // a straight line through a period when we had no data
+  g.beginPath(); g.strokeStyle = accent; g.lineWidth = 1.8;
+  let pen = false;
+  pts.forEach(p => {
+    if(p.value===null){ pen = false; return; }
+    const x = X(p.ts), y = Y(p.value);
+    pen ? g.lineTo(x,y) : g.moveTo(x,y); pen = true;
+  });
+  g.stroke();
+  // fault ticks
+  g.fillStyle = css.getPropertyValue("--bad");
+  pts.forEach(p => { if(p.fault) g.fillRect(X(p.ts)-1, H-pad.b-4, 2, 4); });
+}
+
+// ---- helpers
+async function post(url, body){
+  const r = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"},
+                             body:JSON.stringify(body)});
+  let data = {}; try{ data = await r.json(); }catch(e){}
+  return {ok:r.ok, data};
+}
+function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function dur(s){ s=Math.floor(s); const d=Math.floor(s/86400), h=Math.floor(s%86400/3600),
+  m=Math.floor(s%3600/60); return d?`${d}d ${h}h`:h?`${h}h ${m}m`:`${m}m ${s%60}s`; }
+function ago(ts){ const s=Date.now()/1000-ts;
+  return s<60?`${s.toFixed(1)}s ago`:dur(s)+" ago"; }
+function toast(m){ $("#cfgMsg").textContent = m; alert(m); }
+
+window.addEventListener("resize", () => loadTrend());
+poll(); loadConfig();
+setInterval(poll, 2000);
+setInterval(() => { if(!$("[data-panel=trend]").classList.contains("hide")) loadTrend(); }, 60000);
+</script>
+</body>
+</html>

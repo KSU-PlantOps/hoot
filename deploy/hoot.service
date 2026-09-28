@@ -1,0 +1,65 @@
+# HOOT service unit.
+#   sudo cp deploy/hoot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now hoot
+
+[Unit]
+Description=HOOT - Humidity & Operational Observation Terminal (BACnet probe)
+Documentation=https://github.com/KSU-PlantOps/hoot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hoot
+Group=hoot
+# 'hoot' must be in the i2c group to reach the sensor bus.
+SupplementaryGroups=i2c
+WorkingDirectory=/opt/hoot
+Environment=HOOT_CONFIG=/opt/hoot/config.yaml
+Environment=PYTHONUNBUFFERED=1
+# Web UI password, if web.auth_enabled is true. Put it in an EnvironmentFile
+# rather than here so it is not world-readable in the unit:
+#   EnvironmentFile=-/etc/hoot/secrets.env
+EnvironmentFile=-/etc/hoot/secrets.env
+
+# NO ExecStartPre=... selftest here, deliberately.
+#
+# Two reasons it was removed:
+#   1. selftest binds BACnet on UDP 47808 and releases it moments before
+#      ExecStart binds the same port -- a race that can fail the real start.
+#   2. selftest exits non-zero when a sensor is missing, so systemd would
+#      refuse to start a pod whose probe head was unplugged. That is exactly
+#      backwards: the pod should start and publish a BACnet fault, which is
+#      the whole design principle. A unit that will not boot tells the BAS
+#      nothing at all.
+#
+# Run it by hand before deploying a unit:
+#   sudo -u hoot /opt/hoot/.venv/bin/python -m hoot selftest
+ExecStart=/opt/hoot/.venv/bin/python -m hoot run
+
+Restart=always
+RestartSec=10
+# Don't give up on a unit that is flapping because a sensor is intermittent;
+# a probe that stops trying is worse than one that retries every 10 s.
+StartLimitIntervalSec=0
+
+# BACnet/IP needs UDP 47808 and the web UI needs its port; both are >1024, so
+# no privileged capabilities are required.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# The config file and trend database live here and must stay writable.
+ReadWritePaths=/opt/hoot
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hoot
+
+[Install]
+WantedBy=multi-user.target

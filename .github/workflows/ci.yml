@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 is what Raspberry Pi OS Bookworm ships -- keep it in the matrix.
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install
+        run: pip install -r requirements.txt -e ".[dev]"
+      - name: Lint
+        run: ruff check hoot tests
+      - name: Test
+        run: pytest -q
+      - name: Installer syntax
+        run: bash -n deploy/install.sh
