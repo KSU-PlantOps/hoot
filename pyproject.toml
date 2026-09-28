@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hoot-probe"
-version = "1.0.0"
+version = "1.1.0"
 description = "HOOT — a portable BACnet/IP temperature, humidity and CO2 probe for building automation"
 readme = "README.md"
 requires-python = ">=3.11"
