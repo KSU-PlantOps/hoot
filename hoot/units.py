@@ -30,6 +30,11 @@ SYMBOLS = {
 }
 
 
+def canonical_unit(published: str) -> str:
+    """The canonical (driver/calibration) unit behind a published unit."""
+    return {"degF": "degC", "inHg": "hPa"}.get(published, published)
+
+
 def c_to_f(celsius: float) -> float:
     return celsius * 9.0 / 5.0 + 32.0
 

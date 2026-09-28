@@ -1,4 +1,11 @@
+import csv
+import io
+import json
+import logging
+import zipfile
+
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 
 from hoot.web.app import create_app
@@ -170,3 +177,107 @@ async def test_calibration_does_not_create_a_database_when_logging_is_off(
 async def test_openapi_reports_the_software_version(client):
     from hoot import __version__
     assert client.get("/openapi.json").json()["info"]["version"] == __version__
+
+
+# --- logs, events, full config, support bundle -----------------------------
+
+async def test_logs_endpoint_returns_recent_service_log(client):
+    logging.getLogger("hoot.test").warning("probe lead unplugged")
+    body = client.get("/api/logs?level=WARNING").json()
+    assert any("probe lead unplugged" in e["line"] for e in body["lines"])
+    assert all(e["levelno"] >= logging.WARNING for e in body["lines"])
+
+
+async def test_log_download_is_an_attachment_with_a_header(client):
+    logging.getLogger("hoot.test").warning("for the download")
+    r = client.get("/api/logs/download")
+    assert r.status_code == 200
+    assert "attachment" in r.headers["content-disposition"]
+    assert r.headers["content-disposition"].endswith('.log"')
+    assert r.text.startswith("# HOOT ")
+    assert "for the download" in r.text
+
+
+async def test_events_are_listed_and_exported_as_quoted_csv(client):
+    client.service.store.log_event("warning", "test", 'disagree, by "0.6" degC')
+    events = client.get("/api/events").json()["events"]
+    assert any(e["source"] == "service" and "starting" in e["message"] for e in events)
+
+    r = client.get("/api/events.csv")
+    assert r.status_code == 200
+    rows = list(csv.reader(io.StringIO(r.text)))
+    assert rows[0] == ["timestamp_iso", "timestamp_epoch", "level", "source", "message"]
+    assert ["warning", "test", 'disagree, by "0.6" degC'] in [row[2:] for row in rows[1:]]
+
+
+async def test_config_yaml_download_round_trips(client):
+    r = client.get("/api/config.yaml")
+    assert r.status_code == 200
+    assert "attachment" in r.headers["content-disposition"]
+    assert yaml.safe_load(r.text) == client.service.config.to_dict()
+
+
+async def test_config_yaml_dry_run_validates_without_saving(client):
+    cfg = client.service.config.to_dict()
+    cfg["points"][0]["description"] = "changed in dry run"
+    r = client.post("/api/config.yaml?dry_run=true", content=yaml.safe_dump(cfg),
+                    headers={"Content-Type": "application/yaml"})
+    assert r.status_code == 200
+    assert r.json()["saved"] is False and r.json()["valid"] is True
+    assert client.service.config.points[0].description != "changed in dry run"
+    assert not client.service.config.path.exists()
+
+
+async def test_config_yaml_upload_saves_and_applies(client):
+    cfg = client.service.config.to_dict()
+    cfg["points"][0]["high_limit"] = 90.0
+    r = client.post("/api/config.yaml", content=yaml.safe_dump(cfg),
+                    headers={"Content-Type": "text/yaml"})
+    assert r.status_code == 200
+    assert r.json()["saved"] is True
+    assert client.service.config.points[0].high_limit == 90.0
+    assert yaml.safe_load(client.service.config.path.read_text())["points"][0]["high_limit"] == 90.0
+
+
+async def test_config_yaml_upload_rejects_bad_input(client):
+    headers = {"Content-Type": "application/yaml"}
+    assert client.post("/api/config.yaml", content="device: {name: 'x", headers=headers).status_code == 400
+    assert client.post("/api/config.yaml", content="- just a list", headers=headers).status_code == 400
+    r = client.post("/api/config.yaml", content="device: nonsense", headers=headers)
+    assert r.status_code == 400
+    assert "invalid configuration" in r.json()["detail"]
+
+
+async def test_config_yaml_upload_refuses_form_content_types(client):
+    """CSRF: a cross-site HTML form can POST text/plain with no preflight, so
+    only YAML content types -- which always need a preflight -- are accepted."""
+    body = yaml.safe_dump(client.service.config.to_dict())
+    for ctype in ("text/plain", "application/x-www-form-urlencoded", "multipart/form-data"):
+        r = client.post("/api/config.yaml", content=body, headers={"Content-Type": ctype})
+        assert r.status_code == 415, ctype
+
+
+async def test_restart_refuses_a_bodiless_form_post(client):
+    r = client.post("/api/restart", headers={"Content-Type": "application/x-www-form-urlencoded"})
+    assert r.status_code == 415
+
+
+async def test_support_bundle_contains_config_status_logs_and_events(client):
+    r = client.get("/api/support-bundle.zip")
+    assert r.status_code == 200
+    zf = zipfile.ZipFile(io.BytesIO(r.content))
+    assert set(zf.namelist()) == {"config.yaml", "status.json", "service.log", "events.csv"}
+    assert json.loads(zf.read("status.json"))["device"]["name"] == client.service.config.device.name
+
+
+async def test_new_endpoints_require_auth_when_enabled(sim_config, paused_service, monkeypatch):
+    monkeypatch.setenv("HOOT_WEB_PASSWORD", "s3cret")
+    sim_config.web.auth_enabled = True
+    svc = await paused_service(sim_config)
+    try:
+        with TestClient(create_app(svc)) as c:
+            for path in ("/api/logs", "/api/logs/download", "/api/events", "/api/events.csv",
+                         "/api/config.yaml", "/api/support-bundle.zip"):
+                assert c.get(path).status_code == 401, path
+    finally:
+        await svc.stop()

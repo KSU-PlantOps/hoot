@@ -208,3 +208,12 @@ async def test_out_of_service_uses_the_correct_status_flag_bit(server):
     flags = list(state.obj.statusFlags)
     assert flags[3] == 1, "out-of-service bit not set"
     assert flags[2] == 0, "overridden bit wrongly set"
+
+
+async def test_snapshot_states_the_calibration_offset_unit(sim_config):
+    """The offset is stored in degC; the UI shows it beside a degF value."""
+    sim_config.bacnet.enabled = True
+    server = BACnetServer(sim_config)
+    state = _point(server)
+    state.config.calibration.offset = 0.07
+    assert server.snapshot()["temperature"]["calibration"] == "offset +0.07 °C"

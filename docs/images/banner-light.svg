@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 260" width="1200" height="260" role="img" aria-labelledby="t d">
+  <title id="t">HOOT</title>
+  <desc id="d">HOOT: Humidity and Operational Observation Terminal. A portable BACnet/IP temperature, humidity and CO2 probe.</desc>
+  <!-- owl mark -->
+  <g transform="translate(40 18)">
+    <path d="M52 62 L40 8 L92 44 Z" fill="#2d333b" stroke="#2d333b" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M168 62 L180 8 L128 44 Z" fill="#2d333b" stroke="#2d333b" stroke-width="3" stroke-linejoin="round"/>
+    <ellipse cx="110" cy="122" rx="88" ry="98" fill="#2d333b" stroke="#2d333b" stroke-width="3"/>
+    <circle cx="74" cy="104" r="36" fill="#ffffff" stroke="#d99e00" stroke-width="8"/>
+    <circle cx="146" cy="104" r="36" fill="#ffffff" stroke="#d99e00" stroke-width="8"/>
+    <circle cx="78" cy="106" r="15" fill="#1f2328"/>
+    <circle cx="142" cy="106" r="15" fill="#1f2328"/>
+    <circle cx="83" cy="100" r="4.5" fill="#ffffff"/>
+    <circle cx="147" cy="100" r="4.5" fill="#ffffff"/>
+    <path d="M100 138 L120 138 L110 158 Z" fill="#d99e00"/>
+    <path d="M84 176 l8 8 l8 -8 M102 192 l8 8 l8 -8 M120 176 l8 8 l8 -8" fill="none" stroke="#818b98" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <!-- signal arcs: this owl talks BACnet -->
+  <g fill="none" stroke="#0969da" stroke-width="4" stroke-linecap="round" opacity="0.9">
+    <path d="M236 70 a40 40 0 0 1 0 56"/>
+    <path d="M252 56 a60 60 0 0 1 0 84"/>
+  </g>
+  <text x="300" y="118" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="92" font-weight="800" letter-spacing="6" fill="#1f2328">HOOT</text>
+  <text x="304" y="160" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="24" fill="#59636e"><tspan font-weight="700" fill="#d99e00">H</tspan>umidity &amp; <tspan font-weight="700" fill="#d99e00">O</tspan>perational <tspan font-weight="700" fill="#d99e00">O</tspan>bservation <tspan font-weight="700" fill="#d99e00">T</tspan>erminal</text>
+  <text x="304" y="204" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="19" fill="#1f2328">A portable temperature, humidity &amp; CO₂ probe that any BAS discovers as a BACnet/IP device.</text>
+</svg>

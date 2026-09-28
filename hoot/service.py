@@ -297,9 +297,9 @@ class HootService:
             return sample
 
     def _process_sample(self, driver: SensorDriver, sample: Sample, now: float) -> None:
-        owned = {s.name for s in driver.channels}
-
-        for channel in owned:
+        # Walk channels in the driver's declared order (not a set): this order
+        # becomes the order of readings in the status API and the web UI cards.
+        for channel in (s.name for s in driver.channels):
             binding = self.bindings.get(channel)
             if binding is None or binding.driver is not driver:
                 continue

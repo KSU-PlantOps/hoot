@@ -20,6 +20,8 @@ SD-card notes, because these units run on flash for months:
 from __future__ import annotations
 
 import contextlib
+import csv
+import io
 import logging
 import sqlite3
 import statistics
@@ -285,6 +287,42 @@ class Store:
                 f'{_num(row["value"])},{_num(row["min"])},{_num(row["max"])},'
                 f'{row["samples"]},{row["unit"]},{fault}\n'
             )
+
+    def events(self, since: float | None = None, limit: int = 500) -> list[dict[str, Any]]:
+        """Service events (startup, calibration, sensor warnings), oldest first."""
+        sql = "SELECT ts, level, source, message FROM events"
+        args: list[Any] = []
+        if since is not None:
+            sql += " WHERE ts >= ?"
+            args.append(since)
+        sql += " ORDER BY ts DESC, id DESC LIMIT ?"
+        args.append(limit)
+        rows = self.conn.execute(sql, args).fetchall()
+        return [dict(r) for r in reversed(rows)]
+
+    def export_events_csv(self, since: float | None = None) -> Iterator[str]:
+        """Stream the event log as CSV. Messages are free text, so they are
+        quoted properly rather than having their commas mangled."""
+        sql = "SELECT ts, level, source, message FROM events"
+        args: list[Any] = []
+        if since is not None:
+            sql += " WHERE ts >= ?"
+            args.append(since)
+        sql += " ORDER BY ts, id"
+
+        buf = io.StringIO()
+        writer = csv.writer(buf, lineterminator="\n")
+
+        def line(row: list[Any]) -> str:
+            buf.seek(0)
+            buf.truncate()
+            writer.writerow(row)
+            return buf.getvalue()
+
+        yield line(["timestamp_iso", "timestamp_epoch", "level", "source", "message"])
+        for row in self.conn.execute(sql, args):
+            iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(row["ts"]))
+            yield line([iso, f'{row["ts"]:.3f}', row["level"], row["source"], row["message"]])
 
     # ---- maintenance ------------------------------------------------------
 
