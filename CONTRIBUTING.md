@@ -23,7 +23,7 @@ To see the whole stack running (BACnet, trend, web UI on :8080):
 
 ## Ground rules
 
-- **Python 3.11 compatible.** Raspberry Pi OS Bookworm ships 3.11. CI tests 3.11–3.13 and
+- **Python 3.11 compatible.** Raspberry Pi OS Bookworm ships 3.11. CI tests 3.11–3.14 and
   ruff targets `py311`; don't use newer syntax (for example, reusing the outer quote
   character inside an f-string is a `SyntaxError` on 3.11).
 - **Faults, not stale values.** A sensor that can't be read must show up as a BACnet

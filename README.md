@@ -8,7 +8,7 @@
 <p align="center">
   <a href="https://github.com/KSU-PlantOps/hoot/actions/workflows/ci.yml"><img src="https://github.com/KSU-PlantOps/hoot/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/KSU-PlantOps/hoot/releases/latest"><img src="https://img.shields.io/github/v/release/KSU-PlantOps/hoot" alt="Latest release"></a>
-  <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-3776ab" alt="Python 3.11 | 3.12 | 3.13">
+  <img src="https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-3776ab" alt="Python 3.11 | 3.12 | 3.13 | 3.14">
   <img src="https://img.shields.io/badge/BACnet%2FIP-analog%20inputs-0969da" alt="BACnet/IP">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/KSU-PlantOps/hoot" alt="MIT license"></a>
 </p>
@@ -400,7 +400,7 @@ Report values in SI units (°C, %RH, ppm, hPa). Put per-channel errors in `Sampl
 rather than raising, so one bad channel can't take the healthy ones down. Register the
 driver in `hoot/sensors/__init__.py`.
 
-CI runs on Python 3.11–3.13. Raspberry Pi OS Bookworm ships 3.11, so don't use newer
+CI runs on Python 3.11–3.14. Raspberry Pi OS Bookworm ships 3.11, so don't use newer
 syntax. See [CONTRIBUTING.md](CONTRIBUTING.md). The README images are generated; see
 [docs/images/src](docs/images/src/README.md) to rebuild them.
 

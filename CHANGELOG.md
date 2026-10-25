@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-25
+
+Dependency refresh. No behaviour changes; the BACnet objects, web UI and config format are
+unchanged, so existing units upgrade in place.
+
+### Changed
+
+- Minimum dependency versions raised to the current releases, all tested together on
+  Python 3.11–3.14 and with the simulator end to end:
+  - Core: bacpypes3 0.0.110, PyYAML 6.0.3, psutil 7.2, FastAPI 0.162 (Starlette 1.x),
+    uvicorn 0.54, Jinja2 3.1.6.
+  - Raspberry Pi: Adafruit Blinka 9.2, busdevice 5.2.17, SHT4x 1.0.27, SCD4x 1.4.13,
+    SSD1306 2.12.24, Pillow 13.0. All have aarch64 wheels for Python 3.11, so a Pi 5
+    installs without compiling.
+  - Development: pytest 9.1, pytest-asyncio 1.4, ruff 0.17. The web tests now use
+    `httpx2`, as Starlette has deprecated `httpx` for its test client.
+- CI also tests Python 3.14, which the package already listed as supported.
+- Package metadata uses an SPDX license expression (`license = "MIT"`) instead of the
+  deprecated table form and license classifier, which setuptools will stop accepting in
+  February 2027. Building now needs setuptools 77 or later; `wheel` is no longer a build
+  requirement.
+
 ## [1.1.0] - 2026-09-28
 
 ### Added
